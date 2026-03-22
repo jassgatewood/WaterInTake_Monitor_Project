@@ -13,7 +13,7 @@ Commercial bowl‑intake monitors exist, but this project is meant to be an open
 - [Actijoy](https://www.actijoy.com/)
 
 ### Hardware Plan
-The device will use a 5 kg load cell paired with an HX711 amplifier to measure the weight of a water bowl. An ESP32 micro‑controller will read the sensor values, convert grams to milliliters, and transmit the data over WiFi to the backend. This hardware setup provides accurate, continuous measurement of water intake and supports wireless communication with the dashboard.
+The device will use a 10 kg load cell paired with an HX711 amplifier to measure the weight of a water bowl. An ESP32 micro‑controller will read the sensor values, convert grams to milliliters, and transmit the data over WiFi to the backend. This hardware setup provides accurate, continuous measurement of water intake and supports wireless communication with the dashboard.
 
 ### Physical Structure
 The physical structure is still being designed. The goal is to eventually create something presentable and useful in a real‑world setting, such as an acrylic platform or enclosure that houses the electronics and supports the bowl. This is considered a stretch goal depending on available time before the due date. If it cannot be completed now, it will be built later.
