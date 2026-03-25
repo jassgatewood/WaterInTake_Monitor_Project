@@ -52,6 +52,8 @@ The device will use a 10 kg load cell paired with an HX711 amplifier to measur
 ### Physical Structure
 The physical structure is still being designed. The goal is to eventually create something presentable and useful in a real‑world setting, such as an acrylic platform or enclosure that houses the electronics and supports the bowl. This is considered a stretch goal depending on available time before the due date. If it cannot be completed now, it will be built later.
 
+-[Full Physical Design](Full_Design_Diagram.pdf)
+
 ### Stretch Goals
 - Drinking‑event detection  
 - Low‑water alerts  
