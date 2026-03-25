@@ -21,8 +21,8 @@
 // time between each weight reading
 #define SAMPLE_INTERVAL 2000
 
-// minimum drop to count as drinking
+// minimum drop to count as drinking in grams
 #define DROP_THRESHOLD 2.0
 
-// minimum rise to count as refill
+// minimum rise to count as refill in grams
 #define RISE_THRESHOLD 3.0
