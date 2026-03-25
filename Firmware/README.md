@@ -4,6 +4,30 @@ this firmware runs the hydration monitor system on an esp32 board. it reads weig
 
 ---
 
+this version is set up for serial monitoring only and does not use the tft display yet.
+
+the firmware is modular and organized into separate files for clarity. each module handles one part of the system such as wifi, load cell, or api communication.
+
+the hardware design image is included in the main folder of this repository.
+
+---
+
+## using this firmware
+
+you can use either of these methods to work with the code:
+
+### option 1 — recommended  
+use the **arduino ide** to open and compile the firmware.  
+this is the simplest and most direct way to upload the code to the esp32.
+
+### option 2 — optional  
+use **platformio** inside **vs code** if you want full intellisense, code navigation, and a more advanced development environment.  
+platformio automatically provides the arduino core and resolves missing includes like `arduino.h`.
+
+vs code alone will show warnings about missing arduino files, but this does not affect the firmware or the repository.
+
+---
+
 ## system behavior
 
 the firmware performs these actions:
