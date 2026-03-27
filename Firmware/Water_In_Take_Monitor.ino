@@ -43,7 +43,7 @@ void loop() {
         // update last sample time
         lastSampleTime = now;
 
-        // read weight from load cell
+        // read weight from load cell (already filtered)
         float weight = loadcell_get_weight();
 
         // print weight to serial

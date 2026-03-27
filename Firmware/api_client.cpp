@@ -1,9 +1,7 @@
 // api_client.cpp
 
 #include "api_client.h"
-#include "wifi_manager.h"
-#include "config.h"
-#include <HTTPClient.h>
+
 
 // send json data to server
 void send_json(const String &json) {

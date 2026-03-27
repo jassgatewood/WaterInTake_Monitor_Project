@@ -1,39 +1,12 @@
-// loadcell.cpp
-
+// include load cell header
 #include "loadcell.h"
-#include "config.h"
-#include <HX711.h>
+
 
 // create hx711 object
 HX711 scale;
 
-// number of samples for smoothing
-const int FILTER_SIZE = 5;
-
-// buffer for filter values
-float filterBuffer[FILTER_SIZE];
-
-// index for filter rotation
-int filterIndex = 0;
-
-// smooth the weight reading
-float applyFilter(float newValue) {
-
-    // store new reading in buffer
-    filterBuffer[filterIndex] = newValue;
-
-    // move to next index
-    filterIndex = (filterIndex + 1) % FILTER_SIZE;
-
-    // add all values
-    float sum = 0;
-    for (int i = 0; i < FILTER_SIZE; i++) {
-        sum += filterBuffer[i];
-    }
-
-    // return average value
-    return sum / FILTER_SIZE;
-}
+// create low pass filter with alpha tuned for 100 ms sampling
+LowPassFilter lp(0.15f);
 
 // prepare the load cell for use
 void loadcell_init() {
@@ -54,11 +27,6 @@ void loadcell_init() {
     // apply calibration factor
     scale.set_scale(CALIBRATION_FACTOR);
 
-    // fill filter buffer with zeros
-    for (int i = 0; i < FILTER_SIZE; i++) {
-        filterBuffer[i] = 0;
-    }
-
     Serial.println("load cell ready");
 }
 
@@ -74,8 +42,8 @@ float loadcell_get_weight() {
     // read raw weight
     float raw = scale.get_units(1);
 
-    // smooth the reading
-    float filtered = applyFilter(raw);
+    // apply low pass filter to smooth the reading
+    float filtered = lp.update(raw);
 
     // return filtered weight
     return filtered;

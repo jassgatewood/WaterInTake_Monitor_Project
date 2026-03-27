@@ -1,8 +1,6 @@
 // wifi_manager.cpp
 
 #include "wifi_manager.h"
-#include "config.h"
-#include <WiFi.h>
 
 // connect to wifi
 void wifi_init() {

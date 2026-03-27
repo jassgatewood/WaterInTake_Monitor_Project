@@ -1,7 +1,8 @@
 // api_client.h
 
 #include <Arduino.h>
-
+#include "wifi_manager.h"
+#include <HTTPClient.h>
 // send drinking event
 void api_send_intake(float grams);
 
