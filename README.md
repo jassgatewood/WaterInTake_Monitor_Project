@@ -82,3 +82,120 @@ A simple frontend will visualize:
 - Historical hydration trends  
 
 The dashboard is the primary user interface for this assignment. It allows the end user to view hydration patterns over time, interpret trends, and monitor changes in drinking behavior. The dashboard will pull data from the backend and present it in a clear, interpretable format suitable for ongoing monitoring.
+
+---
+
+## System Architecture
+
+```
+ESP32 (load cell) → WiFi → AWS EC2 (Flask server, Docker) → MongoDB Atlas
+                                      ↑
+                               Web Dashboard (browser)
+```
+
+- **ESP32** reads the load cell, detects drink/refill events, and POSTs data to the server
+- **Flask server** runs on AWS EC2 inside a Docker container, exposes REST API endpoints
+- **MongoDB Atlas** stores all sensor readings in the cloud
+- **Dashboard** is a single HTML page served by Flask at `/dashboard`
+
+---
+
+## Deployment (AWS EC2 + Docker)
+
+### Requirements
+- Docker installed on your machine
+- An AWS account with an EC2 instance running (Amazon Linux 2023, t3.micro)
+- A MongoDB Atlas cluster with your connection URI
+
+### 1. Clone the repo
+```bash
+git clone <your-repo-url>
+cd WaterInTake_Monitor_Project
+```
+
+### 2. Set up environment variables
+Create `backend/.env`:
+```
+MONGO_URI=your_mongodb_atlas_uri
+API_TOKEN=your_secret_token
+```
+
+### 3. Build and run with Docker
+```bash
+docker build -t water-monitor .
+docker run -d --name water-monitor --restart always -p 5000:5000 --env-file backend/.env water-monitor
+```
+
+### 4. Deploy to AWS EC2
+```bash
+# Copy project to EC2
+scp -i your-key.pem project.tar.gz ec2-user@YOUR_EC2_IP:~/
+
+# SSH into EC2 and run
+ssh -i your-key.pem ec2-user@YOUR_EC2_IP
+cd water-monitor
+sudo docker build -t water-monitor .
+sudo docker run -d --name water-monitor --restart always -p 5000:5000 --env-file backend/.env water-monitor
+```
+
+### 5. Open port 5000 in AWS
+In the EC2 Security Group, add an inbound rule:
+- Type: Custom TCP
+- Port: 5000
+- Source: 0.0.0.0/0
+
+### 6. Whitelist EC2 IP in MongoDB Atlas
+In MongoDB Atlas → Network Access → Add IP Address → enter your EC2 public IP.
+
+---
+
+## ESP32 Setup
+
+1. Copy `hydration_monitor/secrets_example.cpp` to `hydration_monitor/secrets.cpp`
+2. Fill in your WiFi credentials, server URL, and API token
+3. Flash the firmware to your ESP32 using PlatformIO
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/data` | Receive sensor event from ESP32 (requires Authorization header) |
+| GET | `/health` | Check server and database status |
+| GET | `/readings` | Get all sensor readings (optional filters: `?type=drink&hours=24`) |
+| GET | `/readings/daily` | Get daily water intake totals |
+| GET | `/readings/since-refill` | Get total ml consumed since last refill |
+| DELETE | `/readings` | Delete readings (optional: `?days=7`) |
+| GET | `/dashboard` | Serve the web dashboard |
+
+---
+
+## Operations
+
+### Check if the server is running
+```bash
+curl http://YOUR_EC2_IP:5000/health
+```
+
+### View server logs
+```bash
+ssh -i your-key.pem ec2-user@YOUR_EC2_IP "sudo docker logs water-monitor"
+```
+
+### Restart the server
+```bash
+ssh -i your-key.pem ec2-user@YOUR_EC2_IP "sudo docker restart water-monitor"
+```
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Dashboard won't load | Check that Docker container is running: `sudo docker ps` |
+| MongoDB connection failed | Make sure your EC2 IP is whitelisted in MongoDB Atlas Network Access |
+| ESP32 not sending data | Check WiFi credentials in `secrets.cpp` and confirm `SERVER_URL` points to your EC2 IP |
+| 401 Unauthorized from server | Make sure `API_TOKEN` in `secrets.cpp` matches `API_TOKEN` in `backend/.env` |
+| Port 5000 refused | Check AWS Security Group has an inbound rule open for port 5000 |

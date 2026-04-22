@@ -26,6 +26,15 @@ void loop() {
     float stable   = getStableWeight();
     float filtered = getFilteredWeight();
 
+    // debug: print weight every second
+    static unsigned long lastPrint = 0;
+    if (millis() - lastPrint > 1000) {
+        Serial.print("filtered: "); Serial.print(filtered);
+        Serial.print(" | stable: "); Serial.print(stable);
+        Serial.print(" | isStable: "); Serial.println(sensorIsStable());
+        lastPrint = millis();
+    }
+
     // update drinking/refill/bowl state logic
     updateStateMachine(stable);
 

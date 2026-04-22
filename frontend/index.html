@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jass Gatewood Hydration Monitor</title>
+
+    <!--
+        Chart.js — a JavaScript library for drawing charts.
+        Loaded from a CDN (content delivery network) so no installation needed.
+        Used to draw the wave-style drink event chart.
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* reset default browser margin/padding and use border-box sizing
+           so padding is included in element width/height calculations */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f4f8;
+            color: #333;
+        }
+
+        /* ── header bar ── */
+        header {
+            background: #1565C0;
+            color: white;
+            padding: 20px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 { font-size: 1.5rem; font-weight: 700; }
+
+        /* shows the last time the dashboard fetched new data */
+        #last-updated { font-size: 0.85rem; opacity: 0.75; }
+
+        /* ── settings button + modal ── */
+        #settings-btn {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.4);
+            color: white;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        #settings-btn:hover { background: rgba(255,255,255,0.25); }
+
+        #settings-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        #settings-overlay.open { display: flex; }
+
+        #settings-modal {
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            width: 360px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        #settings-modal h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        #settings-modal label { font-weight: 600; display: block; margin-bottom: 8px; }
+        #settings-modal select {
+            width: 100%;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 1rem;
+            margin-bottom: 16px;
+        }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+        #settings-delete-btn {
+            background: #e53935;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 20px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        #settings-delete-btn:hover { background: #c62828; }
+        #settings-close-btn {
+            background: #f0f0f0;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 20px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        #settings-close-btn:hover { background: #ddd; }
+
+        /* ── recent events box ── */
+        .events-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .events-section h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .event-list { display: flex; flex-direction: column; gap: 8px; }
+        .event-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            background: #f8f9fb;
+        }
+        .event-icon { font-size: 1.3rem; }
+        .event-label { font-weight: 600; flex: 1; }
+        .event-amount { color: #1565C0; font-weight: 700; }
+        .event-time { font-size: 0.8rem; color: #aaa; }
+
+        /* ── main content area ──
+           centered, max 1100px wide, sections stacked vertically */
+        main {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* ── dog weight input section ── */
+        .weight-section {
+            background: white;
+            border-radius: 10px;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        .weight-section label { font-weight: 600; white-space: nowrap; }
+
+        .weight-section input {
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 1rem;
+            width: 90px;
+        }
+
+        /* highlight the input border blue when focused */
+        .weight-section input:focus {
+            outline: none;
+            border-color: #1565C0;
+        }
+
+        .weight-section .hint { font-size: 0.85rem; color: #888; }
+
+        /* ── hydration status bar ──
+           background and dot color change based on ml/kg/day value */
+        #status-bar {
+            border-radius: 10px;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            background: #f5f5f5;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            transition: background 0.4s; /* smooth color change */
+        }
+
+        /* colored circle indicator next to the status text */
+        .dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: #bbb;
+            transition: background 0.4s;
+        }
+
+        /* ── stat cards ──
+           4 cards in a row showing key metrics */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        /* small uppercase label above the number */
+        .card .label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+
+        /* the big number */
+        .card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1565C0;
+            line-height: 1;
+        }
+
+        /* small unit label below the number (e.g. "ml") */
+        .card .unit {
+            font-size: 0.8rem;
+            color: #999;
+            margin-top: 6px;
+        }
+
+        /* ── time range and delete sections ──
+           reused style for both the time range picker and the delete row */
+        .range-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            flex-wrap: wrap;
+        }
+
+        .range-section label { font-weight: 600; white-space: nowrap; }
+
+        .range-section select {
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .range-section select:focus { outline: none; border-color: #1565C0; }
+
+        /* red delete button */
+        #delete-btn {
+            background: #e53935;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 7px 18px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        #delete-btn:hover { background: #c62828; }
+
+        /* shows the ml total for the selected time range */
+        .range-result {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1565C0;
+        }
+
+        .range-result .range-unit {
+            font-size: 0.9rem;
+            font-weight: normal;
+            color: #888;
+        }
+
+        /* ── chart section ── */
+        .chart-section {
+            background: white;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        .chart-section h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── hourly lookup table ── */
+        .table-section {
+            background: white;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        .table-section h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .table-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .table-controls label { font-weight: 600; }
+
+        .table-controls select {
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .table-controls select:focus { outline: none; border-color: #1565C0; }
+
+        #hourly-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        #hourly-table th {
+            background: #1565C0;
+            color: white;
+            padding: 10px 16px;
+            text-align: left;
+        }
+
+        #hourly-table td {
+            padding: 8px 16px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        #hourly-table tr:last-child td { border-bottom: none; }
+        #hourly-table tr:hover td { background: #f5f8ff; }
+
+        /* ── responsive layout ──
+           on smaller screens, collapse 4-card grid to 2, then 1 */
+        @media (max-width: 750px) {
+            .cards { grid-template-columns: repeat(2, 1fr); }
+            header { flex-direction: column; align-items: flex-start; gap: 6px; }
+        }
+
+        @media (max-width: 420px) {
+            .cards { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Jass Gatewood Hydration Monitor</h1>
+    <div style="display:flex;align-items:center;gap:16px;">
+        <span id="last-updated">Loading...</span>
+        <button id="settings-btn">⚙ Settings</button>
+    </div>
+</header>
+
+<!-- settings modal -->
+<div id="settings-overlay">
+    <div id="settings-modal">
+        <h3>Settings</h3>
+        <label for="delete-range">Clear data:</label>
+        <select id="delete-range">
+            <option value="1">Older than 24 hours</option>
+            <option value="7">Older than 7 days</option>
+            <option value="30">Older than 30 days</option>
+            <option value="all">All data</option>
+        </select>
+        <div class="modal-actions">
+            <button id="settings-close-btn">Cancel</button>
+            <button id="settings-delete-btn">Delete</button>
+        </div>
+    </div>
+</div>
+
+<main>
+
+    <!--
+        Dog weight input.
+        The user enters the pet's weight in kg once.
+        It is saved to localStorage so it persists between page reloads.
+        Used to calculate ml/kg/hr and ml/kg/day.
+    -->
+    <div class="weight-section">
+        <label for="dog-weight">Dog Weight:</label>
+        <input type="number" id="dog-weight" min="0.1" step="0.1" placeholder="e.g. 12">
+        <span class="hint">kg — used for ml/kg/hr and ml/kg/day</span>
+    </div>
+
+    <!--
+        Hydration status bar.
+        Color and text update based on the calculated ml/kg/day value:
+          Green  = within normal range (50–100 ml/kg/day)
+          Yellow = below normal, monitor closely (40–50 ml/kg/day)
+          Red    = dehydration risk (<40) or polydipsia suspected (>100)
+    -->
+    <div id="status-bar">
+        <div class="dot" id="status-dot"></div>
+        <span id="status-text">Enter dog weight to see hydration status</span>
+    </div>
+
+    <!--
+        Four stat cards showing key metrics.
+        All values update automatically every 10 seconds.
+    -->
+    <div class="cards">
+        <!-- total ml of drink events recorded today -->
+        <div class="card">
+            <div class="label">Today So Far</div>
+            <div class="value" id="today-total">—</div>
+            <div class="unit">ml</div>
+        </div>
+        <!-- total ml consumed since the last refill event -->
+        <div class="card">
+            <div class="label">Since Last Refill</div>
+            <div class="value" id="since-refill">—</div>
+            <div class="unit">ml consumed</div>
+        </div>
+        <!-- today's total divided by dog weight divided by hours elapsed today -->
+        <div class="card">
+            <div class="label">ml / kg / hr</div>
+            <div class="value" id="ml-kg-hr">—</div>
+            <div class="unit">today's rate</div>
+        </div>
+        <!-- today's total divided by dog weight -->
+        <div class="card">
+            <div class="label">ml / kg / day</div>
+            <div class="value" id="ml-kg-day">—</div>
+            <div class="unit">today's total</div>
+        </div>
+    </div>
+
+    <!--
+        Time range picker.
+        User selects a window (e.g. last 2 hours) and sees
+        the total ml consumed in that period.
+    -->
+    <div class="range-section">
+        <label for="time-range">Consumed in the last:</label>
+        <select id="time-range">
+            <option value="hours:2">2 hours</option>
+            <option value="hours:5">5 hours</option>
+            <option value="hours:24" selected>24 hours</option>
+            <option value="days:3">3 days</option>
+        </select>
+        <div class="range-result">
+            <span id="range-total">—</span>
+            <span class="range-unit"> ml</span>
+        </div>
+    </div>
+
+    <!-- recent events feed -->
+    <div class="events-section">
+        <h2>Recent Events</h2>
+        <div class="event-list" id="event-list">
+            <div style="color:#aaa;font-size:0.9rem;">Loading...</div>
+        </div>
+    </div>
+
+    <!--
+        Hourly overlap chart — each day is its own colored line.
+        X axis = hour of day (1–24).
+        Y axis = total ml consumed in that hour.
+        Lines overlap so you can compare days side by side.
+    -->
+    <div class="chart-section">
+        <h2>Hourly Water Intake — Last 3 Days</h2>
+        <div id="chart-legend" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;font-size:0.85rem;"></div>
+        <canvas id="daily-chart" height="100"></canvas>
+    </div>
+
+    <!--
+        Hourly lookup table.
+        Select a date and a from/to hour range to see exact ml consumed per hour.
+    -->
+    <div class="table-section">
+        <h2>Hourly Breakdown</h2>
+        <div class="table-controls">
+            <label for="table-date">Date:</label>
+            <select id="table-date"></select>
+            <label for="table-hour">Hour:</label>
+            <select id="table-hour">
+                <option value="" disabled selected>Select hour</option>
+            </select>
+        </div>
+        <table id="hourly-table">
+            <thead>
+                <tr>
+                    <th>Hour</th>
+                    <th>ml Consumed</th>
+                    <th>Drink Events</th>
+                </tr>
+            </thead>
+            <tbody id="hourly-table-body">
+                <tr><td colspan="3" style="color:#aaa;padding:16px;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+</main>
+
+<script>
+    // ── API base URL ─────────────────────────────────────────
+    // All fetch calls use this as the base. Change this if your
+    // Flask server is running on a different machine or IP.
+    const API = 'http://3.144.153.170:5000';
+
+    // ── page state ───────────────────────────────────────────
+    // dogWeight  — the pet's weight in kg (loaded from localStorage on page load)
+    // todayTotalMl — today's total ml consumed, updated by fetchDaily()
+    //               stored here so updateDerivedValues() can use it
+    let dogWeight    = parseFloat(localStorage.getItem('dogWeight')) || null;
+    let todayTotalMl = 0;
+
+    // ── dog weight input ─────────────────────────────────────
+    // Pre-fill the input with the saved value if it exists.
+    // Save to localStorage whenever the user types a new value
+    // so it persists after page reload.
+    const weightInput = document.getElementById('dog-weight');
+    if (dogWeight) weightInput.value = dogWeight;
+
+    weightInput.addEventListener('input', () => {
+        dogWeight = parseFloat(weightInput.value) || null;
+        if (dogWeight) localStorage.setItem('dogWeight', dogWeight);
+        else           localStorage.removeItem('dogWeight');
+        updateDerivedValues(); // recalculate ml/kg values immediately
+    });
+
+    // ── day color palette ────────────────────────────────────
+    const DAY_COLORS       = ['#1565C0', '#2E7D32', '#7B1FA2']; // blue, green, purple
+    const DAY_COLORS_LIGHT = ['rgba(21,101,192,0.08)', 'rgba(46,125,50,0.08)', 'rgba(123,31,162,0.08)'];
+
+    // ── chart initialisation ─────────────────────────────────
+    // X axis = hours 1–24. Each day is a separate dataset (line).
+    const chartCanvas = document.getElementById('daily-chart');
+    const ctx         = chartCanvas.getContext('2d');
+
+    // x-axis labels: 1, 2, 3 ... 24
+    const HOUR_LABELS = Array.from({length: 24}, (_, i) => i + 1);
+
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: HOUR_LABELS,
+            datasets: []
+        },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'ml consumed' }
+                },
+                x: {
+                    title: { display: true, text: 'Hour of Day' }
+                }
+            }
+        }
+    });
+
+    // allDrinkData — stored after fetch so the table can use it without re-fetching
+    let allDrinkData = [];
+
+    // ── fetchDaily ───────────────────────────────────────────
+    // Fetches daily drink totals from the backend.
+    // Updates the "Today So Far" card and triggers ml/kg calculations.
+    async function fetchDaily() {
+        const res  = await fetch(`${API}/readings/daily`);
+        const data = await res.json();
+
+        // find today's entry by matching the date string (YYYY-MM-DD)
+        const today      = new Date().toISOString().slice(0, 10);
+        const todayEntry = data.find(d => d._id === today);
+        todayTotalMl     = todayEntry ? todayEntry.total_ml : 0;
+        document.getElementById('today-total').textContent = todayTotalMl.toFixed(1);
+
+        updateDerivedValues();
+    }
+
+    // ── fetchDrinkChart ──────────────────────────────────────
+    // Fetches drink events from the last 3 days.
+    // Groups by day and by hour, then draws one line per day overlapping on
+    // the same x-axis (hours 1–24).
+    async function fetchDrinkChart() {
+        const res  = await fetch(`${API}/readings?type=drink&days=3`);
+        const data = await res.json();
+
+        allDrinkData = data; // save for table use
+
+        // get up to 3 unique days (YYYY-MM-DD), oldest first
+        const days = [...new Set(data.map(e =>
+            new Date(e.timestamp * 1000).toLocaleDateString('en-CA')
+        ))].sort().slice(-3);
+
+        // build one dataset per day: array of 24 values (hours 1–24, index 0–23)
+        chart.data.datasets = days.map((day, i) => {
+            const hourlyMl = Array(24).fill(0);
+            data.filter(e => new Date(e.timestamp * 1000).toLocaleDateString('en-CA') === day)
+                .forEach(e => {
+                    const hour = new Date(e.timestamp * 1000).getHours(); // 0–23
+                    hourlyMl[hour] += e.amount_ml;
+                });
+
+            return {
+                label: day,
+                data: hourlyMl.map(v => parseFloat(v.toFixed(1))),
+                borderColor: DAY_COLORS[i],
+                backgroundColor: DAY_COLORS_LIGHT[i],
+                tension: 0.4,
+                fill: true,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            };
+        });
+
+        chart.update();
+
+        // rebuild color legend
+        document.getElementById('chart-legend').innerHTML = days.map((day, i) => `
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+                <span style="width:12px;height:12px;border-radius:50%;background:${DAY_COLORS[i]};display:inline-block;"></span>
+                ${new Date(day + 'T12:00:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>`
+        ).join('');
+
+        // populate date dropdown in table
+        const tableDateSel = document.getElementById('table-date');
+        tableDateSel.innerHTML = days.map(d => `<option value="${d}">${d}</option>`).join('');
+        renderTable();
+    }
+
+    // ── renderTable ──────────────────────────────────────────
+    // Shows hours for the selected date. If a specific hour is selected, shows only that row.
+    function renderTable() {
+        const date    = document.getElementById('table-date').value;
+        const hourVal = document.getElementById('table-hour').value;
+
+        if (!date || !hourVal) {
+            document.getElementById('hourly-table-body').innerHTML =
+                '<tr><td colspan="3" style="color:#aaa;padding:16px;">Select a date and hour to see data.</td></tr>';
+            return;
+        }
+
+        const hourRange = [parseInt(hourVal)];
+
+        const rows = [];
+        for (const h of hourRange) {
+            const events = allDrinkData.filter(e => {
+                const d = new Date(e.timestamp * 1000);
+                return d.toLocaleDateString('en-CA') === date && d.getHours() === h;
+            });
+            const totalMl = events.reduce((sum, e) => sum + e.amount_ml, 0);
+            rows.push({ hour: h, totalMl, count: events.length });
+        }
+
+        // format a 0-23 hour as "12:00 am", "1:00 am", ..., "11:00 pm"
+        const fmtHour = h => {
+            if (h === 0)  return '12:00 am';
+            if (h < 12)   return `${h}:00 am`;
+            if (h === 12) return '12:00 pm';
+            return `${h - 12}:00 pm`;
+        };
+
+        document.getElementById('hourly-table-body').innerHTML = rows.length
+            ? rows.map(r => `
+                <tr>
+                    <td><strong>${fmtHour(r.hour)}</strong><span style="color:#aaa;font-size:0.85rem"> — consumed by this hour</span></td>
+                    <td><strong>${r.totalMl.toFixed(1)} ml</strong></td>
+                    <td>${r.count} event${r.count !== 1 ? 's' : ''}</td>
+                </tr>`).join('')
+            : '<tr><td colspan="3" style="color:#aaa;padding:16px;">No drink events in this range.</td></tr>';
+    }
+
+    // ── fetchSinceRefill ─────────────────────────────────────
+    // Fetches the total ml consumed since the last refill event
+    // and updates the "Since Last Refill" card.
+    async function fetchSinceRefill() {
+        const res  = await fetch(`${API}/readings/since-refill`);
+        const data = await res.json();
+        document.getElementById('since-refill').textContent = data.total_ml.toFixed(1);
+    }
+
+    // ── fetchRangeTotal ──────────────────────────────────────
+    // Fetches the total ml consumed in the user-selected time window
+    // (e.g. last 2 hours) and updates the range total display.
+    async function fetchRangeTotal() {
+        // the dropdown value is formatted as "hours:2" or "days:3"
+        // split on ":" to get the unit and amount separately
+        const [unit, amount] = document.getElementById('time-range').value.split(':');
+        const res  = await fetch(`${API}/readings?type=drink&${unit}=${amount}`);
+        const data = await res.json();
+
+        // sum up all amount_ml values from the returned events
+        const total = data.reduce((sum, e) => sum + e.amount_ml, 0);
+        document.getElementById('range-total').textContent = total.toFixed(1);
+    }
+
+    // ── updateDerivedValues ──────────────────────────────────
+    // Calculates ml/kg/day and ml/kg/hr from todayTotalMl and dogWeight.
+    // Called whenever today's total or the dog weight changes.
+    function updateDerivedValues() {
+        if (!dogWeight) {
+            // can't calculate without a weight — show dashes and clear status
+            document.getElementById('ml-kg-hr').textContent  = '—';
+            document.getElementById('ml-kg-day').textContent = '—';
+            updateStatus(null);
+            return;
+        }
+
+        const now = new Date();
+        // hours elapsed since midnight (minimum 1 to avoid dividing by zero at midnight)
+        const hoursElapsed = now.getHours() + now.getMinutes() / 60 || 1;
+
+        const mlPerKgDay = todayTotalMl / dogWeight;
+        const mlPerKgHr  = mlPerKgDay / hoursElapsed;
+
+        document.getElementById('ml-kg-day').textContent = mlPerKgDay.toFixed(2);
+        document.getElementById('ml-kg-hr').textContent  = mlPerKgHr.toFixed(3);
+
+        updateStatus(mlPerKgDay);
+    }
+
+    // ── updateStatus ─────────────────────────────────────────
+    // Updates the status bar color and message based on ml/kg/day.
+    // Clinical thresholds for dogs:
+    //   < 40  ml/kg/day → dehydration risk (red)
+    //   40–50 ml/kg/day → below normal, monitor (yellow)
+    //   50–100 ml/kg/day → normal range (green)
+    //   > 100 ml/kg/day → polydipsia suspected (red)
+    function updateStatus(mlPerKgDay) {
+        const bar  = document.getElementById('status-bar');
+        const dot  = document.getElementById('status-dot');
+        const text = document.getElementById('status-text');
+
+        if (mlPerKgDay === null) {
+            bar.style.background = '#f5f5f5';
+            dot.style.background = '#bbb';
+            text.textContent     = 'Enter dog weight to see hydration status';
+            return;
+        }
+
+        if (mlPerKgDay < 40) {
+            bar.style.background = '#FFEBEE';
+            dot.style.background = '#F44336'; // red
+            text.textContent     = `Dehydration risk — ${mlPerKgDay.toFixed(1)} ml/kg/day (normal: 50–100)`;
+        } else if (mlPerKgDay < 50) {
+            bar.style.background = '#FFF8E1';
+            dot.style.background = '#FF9800'; // yellow
+            text.textContent     = `Below normal, monitor closely — ${mlPerKgDay.toFixed(1)} ml/kg/day (normal: 50–100)`;
+        } else if (mlPerKgDay <= 100) {
+            bar.style.background = '#E8F5E9';
+            dot.style.background = '#4CAF50'; // green
+            text.textContent     = `Within normal range — ${mlPerKgDay.toFixed(1)} ml/kg/day`;
+        } else {
+            bar.style.background = '#FFEBEE';
+            dot.style.background = '#F44336'; // red
+            text.textContent     = `Polydipsia suspected — ${mlPerKgDay.toFixed(1)} ml/kg/day (normal: 50–100)`;
+        }
+    }
+
+    // ── refresh ──────────────────────────────────────────────
+    // Runs all four fetch functions at the same time (in parallel).
+    // Called once on page load, then automatically every 10 seconds
+    // so the dashboard stays up to date without manual refreshing.
+    async function refresh() {
+        await Promise.all([fetchDaily(), fetchSinceRefill(), fetchRangeTotal(), fetchDrinkChart(), fetchRecentEvents()]);
+        document.getElementById('last-updated').textContent =
+            'Last updated: ' + new Date().toLocaleTimeString();
+    }
+
+    // ── time range dropdown ──────────────────────────────────
+    document.getElementById('time-range').addEventListener('change', fetchRangeTotal);
+
+    // ── populate hour dropdowns (0–23) ───────────────────────
+    const fmtHourOpt = h => {
+        if (h === 0)  return '12:00 am';
+        if (h < 12)   return `${h}:00 am`;
+        if (h === 12) return '12:00 pm';
+        return `${h - 12}:00 pm`;
+    };
+    document.getElementById('table-hour').innerHTML =
+        '<option value="" disabled selected>Select hour</option>' +
+        Array.from({length: 24}, (_, i) => `<option value="${i}">${fmtHourOpt(i)}</option>`).join('');
+
+    document.getElementById('table-date').addEventListener('change', renderTable);
+    document.getElementById('table-hour').addEventListener('change', renderTable);
+
+    // ── settings modal ───────────────────────────────────────
+    const overlay = document.getElementById('settings-overlay');
+    document.getElementById('settings-btn').addEventListener('click', () => overlay.classList.add('open'));
+    document.getElementById('settings-close-btn').addEventListener('click', () => overlay.classList.remove('open'));
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+
+    document.getElementById('settings-delete-btn').addEventListener('click', async () => {
+        const val   = document.getElementById('delete-range').value;
+        const label = document.getElementById('delete-range').selectedOptions[0].text;
+        const confirmed = window.confirm(`Delete: ${label}? This cannot be undone.`);
+        if (!confirmed) return;
+        const url  = val === 'all' ? `${API}/readings` : `${API}/readings?days=${val}`;
+        const res  = await fetch(url, { method: 'DELETE' });
+        const data = await res.json();
+        alert(`Deleted ${data.deleted} records.`);
+        overlay.classList.remove('open');
+        refresh();
+    });
+
+    // ── fetchRecentEvents ────────────────────────────────────
+    // Fetches the 10 most recent events of any type and renders them.
+    async function fetchRecentEvents() {
+        const res   = await fetch(`${API}/readings?hours=24`);
+        const data  = await res.json();
+        const recent = data.slice(0, 5);
+
+        const icons = { drink: '💧', refill: '🪣', bowl_placed: '🥣', baseline_set: '⚖️' };
+        const labels = { drink: 'Drink', refill: 'Refill', bowl_placed: 'Bowl Placed', baseline_set: 'Baseline Set' };
+
+        const fmtTime = ts => new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        document.getElementById('event-list').innerHTML = recent.length
+            ? recent.map(e => `
+                <div class="event-item">
+                    <span class="event-icon">${icons[e.type] || '📋'}</span>
+                    <span class="event-label">${labels[e.type] || e.type}</span>
+                    ${e.amount_ml > 0 ? `<span class="event-amount">${e.amount_ml.toFixed(1)} ml</span>` : ''}
+                    <span class="event-time">${fmtTime(e.timestamp)}</span>
+                </div>`).join('')
+            : '<div style="color:#aaa;font-size:0.9rem;">No events in the last 24 hours.</div>';
+    }
+
+    // ── start ────────────────────────────────────────────────
+    // Fetch data immediately when the page loads,
+    // then repeat every 10 seconds to catch new drink events from the ESP32.
+    refresh();
+    setInterval(refresh, 10000);
+</script>
+
+</body>
+</html>

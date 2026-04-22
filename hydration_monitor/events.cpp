@@ -49,6 +49,7 @@ void sendEventToServer(const char* type, float amount_ml, time_t timestamp) {
     HTTPClient http;
     http.begin(SERVER_URL);
     http.addHeader("Content-Type", "application/json");
+    http.addHeader("Authorization", API_TOKEN);
 
     // build json payload
     StaticJsonDocument<200> doc;

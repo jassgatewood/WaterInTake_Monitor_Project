@@ -13,6 +13,12 @@ float calibration_factor = -204.0f;
 float filteredWeight = 0.0f;
 bool firstSample     = true;
 
+// median filter buffer — stores last 5 raw readings
+#define MEDIAN_SIZE 5
+float  medianBuffer[MEDIAN_SIZE] = {0};
+int    medianIndex               = 0;
+bool   medianFull                = false;
+
 // stable weight detection
 float stableWeight        = 0.0f;
 unsigned long stableStart = 0;
@@ -20,8 +26,8 @@ bool isStable             = false;
 static float refWeight    = 0.0f;
 
 // stability thresholds
-const float STABLE_THRESHOLD    = 0.3f;
-const unsigned long STABLE_TIME = 1500;
+const float STABLE_THRESHOLD    = 1.5f;
+const unsigned long STABLE_TIME = 3000;
 
 // global outputs for other modules
 float globalStableWeight   = 0.0f;
@@ -70,13 +76,35 @@ void updateSensorReadings() {
     // read raw weight (averaged samples)
     float rawWeight = scale.get_units(3);
 
-    // exponential moving average filter
-    float alpha = 0.2f;
+    // --- step 1: median filter ---
+    // store raw reading in circular buffer
+    medianBuffer[medianIndex] = rawWeight;
+    medianIndex = (medianIndex + 1) % MEDIAN_SIZE;
+    if (medianIndex == 0) medianFull = true;
+
+    // copy buffer and sort to find the median
+    float sorted[MEDIAN_SIZE];
+    memcpy(sorted, medianBuffer, sizeof(sorted));
+    // simple insertion sort (fast enough for 5 elements)
+    for (int i = 1; i < MEDIAN_SIZE; i++) {
+        float key = sorted[i];
+        int j = i - 1;
+        while (j >= 0 && sorted[j] > key) {
+            sorted[j + 1] = sorted[j];
+            j--;
+        }
+        sorted[j + 1] = key;
+    }
+    float median = sorted[MEDIAN_SIZE / 2]; // middle value
+
+    // --- step 2: EMA on the cleaned median value ---
+    // alpha 0.4 is faster than before (was 0.2) since spikes are already removed
+    float alpha = 0.4f;
     if (firstSample) {
-        filteredWeight = rawWeight;
+        filteredWeight = median;
         firstSample    = false;
     } else {
-        filteredWeight = alpha * rawWeight + (1.0f - alpha) * filteredWeight;
+        filteredWeight = alpha * median + (1.0f - alpha) * filteredWeight;
     }
 
     // stability detection

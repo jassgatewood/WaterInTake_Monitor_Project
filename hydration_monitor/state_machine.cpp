@@ -17,8 +17,13 @@ float lastStableWeight = 0.0f;
 bool hasBaseline       = false;
 
 // thresholds for detecting drinking and refills
-const float DRINK_THRESHOLD_G  = 4.0f;
-const float REFILL_THRESHOLD_G = 8.0f;
+const float DRINK_THRESHOLD_G  = 8.0f;
+const float REFILL_THRESHOLD_G = 15.0f;
+
+// return baseline weight if set, otherwise 0
+float getBaselineWeight() {
+    return hasBaseline ? baselineWeight : 0.0f;
+}
 
 // reset all state machine variables
 void initStateMachine() {
@@ -68,6 +73,17 @@ void updateStateMachine(float stableWeight) {
     // bowl is present and baseline is active
     else if (currentState == STATE_NORMAL) {
 
+        // check bowl removal first — prevents the weight drop from
+        // also being logged as a drink event
+        if (stableWeight < 5.0f) {
+            logEvent("bowl_removed", 0.0f);
+            sendEventToServer("bowl_removed", 0.0f, time(nullptr));
+            currentState     = STATE_EMPTY;
+            hasBaseline      = false;
+            baselineWeight   = 0.0f;
+            return;
+        }
+
         // calculate weight change since last stable reading
         float diff = stableWeight - lastStableWeight;
 
@@ -87,19 +103,10 @@ void updateStateMachine(float stableWeight) {
             lastStableWeight = stableWeight;
             currentState     = STATE_EVENT_LOCK;
         }
-
-        // detect bowl removal
-        if (stableWeight < 5.0f) {
-            logEvent("bowl_removed", 0.0f);
-            sendEventToServer("bowl_removed", 0.0f, time(nullptr));
-            currentState     = STATE_EMPTY;
-            hasBaseline      = false;
-            baselineWeight   = 0.0f;
-        }
     }
 
     // ---------------- EVENT LOCK ----------------
-    // wait for weight to settle before returning to normal
+    // brief pause after an event before watching for the next one
     else if (currentState == STATE_EVENT_LOCK) {
 
         // unlock once weight stabilizes near last stable value
